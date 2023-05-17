@@ -8,10 +8,10 @@ const quoterAddress = '0xb27308f9F90D607463bb33eA1BeBb41C27CE5AB6'; // Uniswap Q
 const tokenAddress = '0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984'; // goerli uni
 const fee = 3000; // Uniswap pool fee bps 500, 3000, 10000
 const buyAmount = ethers.parseUnits('0.001', 'ether');
-const targetPrice = BigInt(30); // target exchange rate
+const targetPrice = BigInt(35); // target exchange rate
 const targetAmountOut = buyAmount * targetPrice;
 const sellAmount = buyAmount / targetPrice;
-const tradeFrequency = 3600 * 1000; // seconds (once per hour)
+const tradeFrequency = 3600 * 1000; // ms (once per hour)
 
 // `https://eth-mainnet.alchemyapi.io/v2/${process.env.ALCHEMY_API_KEY}`
 const provider = new ethers.JsonRpcProvider(`https://eth-goerli.alchemyapi.io/v2/${process.env.ALCHEMY_API_KEY}`);
@@ -60,7 +60,6 @@ const sellTokens = async () => {
   const tx = await router.exactInputSingle([tokenAddress, wethAddress, fee, wallet.address, deadline, sellAmount, 0, 0]);
   await tx.wait();
   console.log(tx.hash);
-
 }
 
 const checkPrice = async () => {
