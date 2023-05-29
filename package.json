@@ -1,6 +1,12 @@
 {
   "dependencies": {
+    "axios": "^1.4.0",
+    "bignumber.js": "^9.1.1",
     "dotenv": "^16.0.3",
-    "ethers": "^6.3.0"
+    "ethers": "^6.3.0",
+    "inquirer": "^9.2.6",
+    "mathjs": "^11.8.0",
+    "prompt-choices": "^4.0.6",
+    "prompt-sync": "^4.2.0"
   }
 }
