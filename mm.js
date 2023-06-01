@@ -1,8 +1,74 @@
-const ethers = require('ethers');
-const prompt = require("prompt-sync")({ sigint: true }) // get user input
-const BigNumber = require('bignumber.js');
-require("dotenv").config();
+import { ethers } from "ethers";
+import promptSync from 'prompt-sync';
+const prompt = promptSync();
+import BigNumber from 'bignumber.js'
+import dotenv from 'dotenv'
+import cheerio from "cheerio";
+import axios from "axios";
+import Web3 from 'web3'
+import { cos } from "mathjs";
+dotenv.config()
 
+
+var arrayHashResult = []
+var responseEtherscan
+
+var arrayContractAddress = []
+var infuraApi = 'https://mainnet.infura.io/v3/5305840bb5e942aeb9c11f091be583b7';
+var web3Provider = new Web3.providers.HttpProvider(infuraApi);
+var web3 = new Web3(web3Provider);
+
+
+
+/*** permet de recupérer l'adresse du contract d'un token a partir d'un hash de transaction */
+async function getContractAddressByHash() {
+  
+
+  
+
+  for (let i = 0; i < arrayHashResult.length; i++) {
+   
+    var responseContractAddress = await web3.eth.getTransactionReceipt(arrayHashResult[i])
+      .then((responde) => {
+        if (responde.logs.length != 0) {
+          return responde.logs[2].address
+        }
+      });
+      if (responseContractAddress != undefined) {
+        arrayContractAddress.push(responseContractAddress)
+      }
+  }
+}
+
+/** permet de recuperer d'historique des transaction d'une adresse de wallet sur etherscan */
+async function GetHashByAddress() { //get hash all transaction on a address
+  responseEtherscan =  await axios('https://etherscan.io/address/0x482ef6ea106c944bcc940b2d7148c3137d7eace3')
+  const $ = cheerio.load(responseEtherscan.data);
+  const allRows = $('table.table > tbody > tr');
+
+  allRows.slice(0,25).each((index, element) => {
+    const tds = $(element).find('td');
+    if ($(tds[2]).text() == 'Swap ETH For Exa...') {
+      if ($(tds[1]).text().includes(' ')) {
+        arrayHashResult.push($(tds[1]).text().substring(1))
+      } else {
+        arrayHashResult.push($(tds[1]).text())
+      }
+    }
+  })
+}
+
+
+await GetHashByAddress()
+//console.log(arrayHashResult)
+await getContractAddressByHash()
+//console.log(responseContractAddress)
+console.log(arrayContractAddress)
+
+
+  
+  
+/*
 const routerAddress = '0xE592427A0AEce92De3Edee1F18E0157C05861564'; // Uniswap Router
 const quoterAddress = '0xb27308f9F90D607463bb33eA1BeBb41C27CE5AB6'; // Uniswap Quoter
 var wethAddress = ''
@@ -102,11 +168,9 @@ const sellTokens = async () => {
 if (typeTrade == 's') {
   sellTokens()
 } else if (typeTrade == 'b') {
-  buyTokens()
+  buyTokens()  
 }
-
-
-
+*/
 
 
 
