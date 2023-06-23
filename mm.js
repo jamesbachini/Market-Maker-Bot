@@ -1,48 +1,133 @@
-import { ethers } from "ethers";
+import { Contract, ethers } from "ethers";
 import promptSync from 'prompt-sync';
 const prompt = promptSync();
 import BigNumber from 'bignumber.js'
 import dotenv from 'dotenv'
-import cheerio from "cheerio";
-import axios from "axios";
+import cheerio from "cheerio";  
 import Web3 from 'web3'
-import { cos } from "mathjs";
+import { combinations, cos } from "mathjs";
+import axios from 'axios'
+import readline from 'readline'
+import chalk from 'chalk'
+
 dotenv.config()
+readline.emitKeypressEvents(process.stdin)
+if (process.stdin.isTTY) {
+  process.stdin.setRawMode(true);
+}
 
 
-var arrayHashResult = []
-var responseEtherscan
 
-var arrayContractAddress = []
-var infuraApi = 'https://mainnet.infura.io/v3/5305840bb5e942aeb9c11f091be583b7';
-var web3Provider = new Web3.providers.HttpProvider(infuraApi);
+var ctx = new chalk.constructor({level: 3});
+var web3Provider = new Web3.providers.HttpProvider(`https://mainnet.infura.io/v3/${process.env.INFURA_API_KEY}`);
 var web3 = new Web3(web3Provider);
+var arrayHashResultGetOnBlockChain = []
+var arrayContractAddressGetByHashResult = []
+var counterNewContract = 0
+var exitVar = false
+var getWithAddress = 0
+var responseEtherscan = 0
 
 
 
-/*** permet de recupérer l'adresse du contract d'un token a partir d'un hash de transaction */
-async function getContractAddressByHash() {
+console.log(ctx.rgb(224, 49, 49)("Press 'SUPPR' to stop terminal"))
+console.log(ctx.rgb(68, 192, 230)("Press 'Q' to exit selection \nPress 'S' to get contrat with address \nPress 'B' to scan blockchain"))
+
+
+
+/** GLOBAL FUNCTION */
+
+function resetVariable() {
+  arrayHashResultGetOnBlockChain = []
+  arrayContractAddressGetByHashResult = []
+  counterNewContract = 0
+  getWithAddress = 0
+  responseEtherscan = 0
+}
+
+/** --------------- */
+
+
+
+/** FUNCTION FOR GET ADDRESS ON BLOCKCHAIN */
+
+function getContractInBlock() {
+  /** permet de voir si de nouveaux contract on etait ajouter sur la blockchain */
+  web3.eth.getBlock("latest").then((response) => {
+    (response.transactions).forEach(element => {
+      web3.eth.getTransaction(element)
+        .then((response2) => {
+          if ('to' in response2) {
+            if (response2.to == null) {
+              getContractAddressByHash(response2.hash)
+              counterNewContract++
+            }
+          }
+        });
+    });
+  });
+
+ 
+  if (exitVar == true) {
+    console.log("EXIT BLOCK EXPLORE")
+    exitVar = false
+  } else if (counterNewContract >= 0 ) {
+    if (counterNewContract >= 1 ) {
+      tradeToken()
+
+       //console.log("number contract : " + counterNewContract)
+      console.log("------------------------------------------------------")
+      for (let i = 0; i < arrayContractAddressGetByHashResult.length; i++) {
+        console.log(arrayContractAddressGetByHashResult[i].contract)
+      }
+      console.log("------------------------------------------------------")
+    }
+    setTimeout(() => {
+      getContractInBlock()
+    }, 13000);
+  } 
   
+}
 
+async function getContractAddressByHash(hash) {
+  /*** permet de recupérer l'adresse du contract d'un token a partir d'un hash de transaction */
+  var responseContractAddress = await web3.eth.getTransactionReceipt(hash).then((responde) => {
+    return responde.contractAddress
+  });
+  if (responseContractAddress != undefined) {
+    arrayContractAddressGetByHashResult.push({contract: responseContractAddress, timeCreate: Date.now()})
+  }
+}
+
+function tradeToken() {
   
+}
 
-  for (let i = 0; i < arrayHashResult.length; i++) {
-   
-    var responseContractAddress = await web3.eth.getTransactionReceipt(arrayHashResult[i])
+/** ----------------- */
+
+
+
+/** FUNCTION GET ADDRESS ON WALLET */
+
+async function getContractAddressByHashArray() {
+  /*** permet de recupérer l'adresse du contract d'un token a partir d'un tableau de hash de transaction */
+  for (let i = 0; i < arrayHashResultGetOnBlockChain.length; i++) {
+    var responseContractAddress = await web3.eth.getTransactionReceipt(arrayHashResultGetOnBlockChain[i])
       .then((responde) => {
         if (responde.logs.length != 0) {
           return responde.logs[2].address
         }
       });
       if (responseContractAddress != undefined) {
-        arrayContractAddress.push(responseContractAddress)
+        arrayContractAddressGetByHashResult.push(responseContractAddress)
       }
   }
+  console.log(arrayContractAddressGetByHashResult)
 }
 
-/** permet de recuperer d'historique des transaction d'une adresse de wallet sur etherscan */
-async function GetHashByAddress() { //get hash all transaction on a address
-  responseEtherscan =  await axios('https://etherscan.io/address/0x482ef6ea106c944bcc940b2d7148c3137d7eace3')
+async function GetHashByAddress() {
+  /** permet de recuperer d'historique des transaction d'une adresse de wallet sur etherscan */
+  responseEtherscan =  await axios('https://etherscan.io/address/0x52349Cc33b14B7ED72696f1d7FC8B17A1117E7d6')
   const $ = cheerio.load(responseEtherscan.data);
   const allRows = $('table.table > tbody > tr');
 
@@ -50,23 +135,59 @@ async function GetHashByAddress() { //get hash all transaction on a address
     const tds = $(element).find('td');
     if ($(tds[2]).text() == 'Swap ETH For Exa...') {
       if ($(tds[1]).text().includes(' ')) {
-        arrayHashResult.push($(tds[1]).text().substring(1))
+        arrayHashResultGetOnBlockChain.push($(tds[1]).text().substring(1))
+        counterNewContract++
       } else {
-        arrayHashResult.push($(tds[1]).text())
+        arrayHashResultGetOnBlockChain.push($(tds[1]).text())
+        counterNewContract++
       }
     }
   })
+
+  if (exitVar == true) {
+    console.log("EXIT ADDRESS EXPLORE")
+    exitVar = false
+  } else if (counterNewContract >= 0) { 
+    if (arrayHashResultGetOnBlockChain != []) {
+      await getContractAddressByHashArray()
+    }
+    setTimeout(() => {
+      arrayHashResultGetOnBlockChain = []
+      responseEtherscan = 0
+      counterNewContract = 0
+      arrayContractAddressGetByHashResult = []
+      GetHashByAddress()
+    }, 10000);
+  } 
 }
 
-
-await GetHashByAddress()
-//console.log(arrayHashResult)
-await getContractAddressByHash()
-//console.log(responseContractAddress)
-console.log(arrayContractAddress)
+/** ------------------ */
 
 
-  
+
+function start() {
+  process.stdin.on('keypress', async (chunk, key) => {
+    /* permet de changer la detection des touches pour intéragir avec le script*/
+    if (key && key.name == 'q'){
+      exitVar = true
+      start()
+      resetVariable()
+    }
+    if (key && key.name == 'delete'){
+      process.exit()
+    }
+    if (key && key.name == 's') {
+      await GetHashByAddress()
+    }
+    if (key && key.name == 'b') {
+      console.log(ctx.bold('---------START GET ADDRESS ON BLOCKCHAIN---------'))
+      resetVariable()
+      getContractInBlock()
+    }
+  });
+}
+
+start()
   
 /*
 const routerAddress = '0xE592427A0AEce92De3Edee1F18E0157C05861564'; // Uniswap Router
