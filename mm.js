@@ -28,10 +28,38 @@ var exitVar = false
 var getWithAddress = 0
 var responseEtherscan = 0
 
+const routerAddress = '0xE592427A0AEce92De3Edee1F18E0157C05861564'; // Uniswap Router
+const quoterAddress = '0xb27308f9F90D607463bb33eA1BeBb41C27CE5AB6'; // Uniswap Quoter
+var wethAddress = '0xB4FBF271143F4FBf7B91A5ded31805e42b2208d6'
+var provider = new ethers.JsonRpcProvider(`https://eth-goerli.g.alchemy.com/v2/${process.env.ALCHEMY_API_KEY}`)
+var ethQuantity = '0.001'
+var buyAmount = ethers.parseUnits(ethQuantity, 'ether');// montant d'eth a swap
+const fee = 3000; 
+const wallet = new ethers.Wallet(process.env.PRIVATE_KEY);
+const account = wallet.connect(provider);
+var deadline 
+var tx
+var token
+var sellAmount 
+
+const router = new ethers.Contract(
+  routerAddress,
+  [
+    'function exactInputSingle((address tokenIn, address tokenOut, uint24 fee, address recipient, uint256 deadline, uint256 amountIn, uint256 amountOutMinimum, uint160 sqrtPriceLimitX96)) external payable returns (uint256 amountOut)'
+  ],account
+);
+
+const quoter = new ethers.Contract(
+  quoterAddress,
+  [
+    'function quoteExactInputSingle(address tokenIn, address tokenOut, uint24 fee, uint256 amountIn, uint160 sqrtPriceLimitX96) public view returns (uint256 amountOut)'
+  ],account
+);
+
 
 
 console.log(ctx.rgb(224, 49, 49)("Press 'SUPPR' to stop terminal"))
-console.log(ctx.rgb(68, 192, 230)("Press 'Q' to exit selection \nPress 'S' to get contrat with address \nPress 'B' to scan blockchain"))
+console.log(ctx.rgb(68, 192, 230)("Press 'Q' to exit selection \nPress 'A' to get contrat with address \nPress 'C' to scan blockchain \nPress 'B' to buy token \nPress 'S' to sell token"))
 
 
 
@@ -165,6 +193,134 @@ async function GetHashByAddress() {
 
 
 
+/** MANUEL TRADE */
+var tebtestaddress= ['0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984', '0x07865c6e87b9f70255377e024ace6630c1eaa37f']
+
+var arrayHistoriBuyToken = []
+
+function executeBuyRequestEth(contrat) {
+  return new Promise(async result => {
+    console.log('Buying Tokens')
+    deadline = Math.floor(Date.now() / 1000) + 600;
+    tx = await router.exactInputSingle([wethAddress, contrat, fee, wallet.address, deadline, buyAmount, 0, 0], {value: buyAmount});
+    await tx.wait()/* .then((e) => {console.log(e)}); */
+    var amountOut = await quoter.quoteExactInputSingle(wethAddress, contrat, fee, buyAmount, 0);
+    var countBuyToken = (BigNumber(amountOut) * BigNumber(0.000000000000000001)).toPrecision(6)
+
+    //console.log(`Current Exchange Rate: ${amountOut.toString()}`);
+    //console.log(`Current Exchange Rate: ${((BigNumber(amountOut) * BigNumber(0.000000000000000001)).toPrecision(6)).toString()}`);
+    //console.log('Quantity buy : ' + countBuyToken)
+    //console.log(tx.hash);
+
+    var callback = {
+      contrat: contrat,
+      quantityBuyInGwei: amountOut,
+      quantityBuyForToken: countBuyToken,
+      time: Date.now(),
+      hashTransaction: tx.hash
+    }
+    result(callback)
+  })
+}
+
+async function test() {
+  for (let i = 0; i < tebtestaddress.length; i++) {
+    const result = await executeBuyRequestEth(tebtestaddress[i])
+    arrayHistoriBuyToken.push(result)
+  }
+  console.log(arrayHistoriBuyToken)
+  console.log(ctx.bold('---------PURCHASE COMPLETE---------'))
+  console.log(ctx.rgb(68, 192, 230)("Press 'SUPPR' to stop terminal or 'S' to sell token"))
+}
+
+
+function executeSellRequestEth(contrat) {
+  return new Promise(async result => {
+    console.log('Selling Tokens')
+    token = new ethers.Contract(
+      contrat.contrat,
+      [
+        'function approve(address spender, uint256 amount) external returns (bool)',
+        'function allowance(address owner, address spender) public view returns (uint256)',
+      ],account
+    );
+
+    sellAmount = BigNumber(contrat.quantityBuyInGwei).toString()
+
+    const allowance = await token.allowance(wallet.address, routerAddress);
+    console.log(`Current allowance: ${allowance}`);
+    /**aurosiration contract */
+    if (allowance < sellAmount) {
+      console.log('Approving Spend (bulk approve in production)');
+      const atx = await token.approve(routerAddress, sellAmount);
+      await atx.wait();
+    }
+
+    deadline = Math.floor(Date.now() / 1000) + 600;
+    const tx = await router.exactInputSingle([contrat.contrat, wethAddress, fee, wallet.address, deadline, sellAmount, 0, 0]);
+    await tx.wait();
+    //console.log(tx.hash);
+
+    var callback = {
+      contrat: contrat.contrat,
+      quantitySellInGwei: BigNumber(contrat.quantityBuyInGwei),
+      quantitySellForToken: contrat.quantityBuyForToken,
+      time: Date.now(),
+      hashTransaction: tx.hash
+    }
+    result(callback)
+  })
+}
+
+async function testSell() {
+  for (let i = 0; i < arrayHistoriBuyToken.length; i++) {
+    const result = await executeSellRequestEth(arrayHistoriBuyToken[i])
+    console.log(result)
+  }
+}
+
+
+
+
+
+
+
+function buyTokens() {
+  tebtestaddress.forEach(async element => {
+    console.log('Buying Tokens')
+    const test = element
+    tx = await router.exactInputSingle([wethAddress, test, fee, wallet.address, deadline, buyAmount, 0, 0], {value: buyAmount});
+    await tx.wait().then((e) => {console.log(e)});
+    amountOut = await quoter.quoteExactInputSingle(wethAddress, test, fee, buyAmount, 0);
+  
+    console.log(`Current Exchange Rate: ${amountOut.toString()}`);
+    //console.log(`Current Exchange Rate: ${((BigNumber(amountOut) * BigNumber(0.000000000000000001)).toPrecision(6)).toString()}`);
+    countBuyToken = (BigNumber(amountOut) * BigNumber(0.000000000000000001)).toPrecision(6)
+    console.log('Quantity buy : ' + countBuyToken)
+    console.log(tx.hash);
+  });
+}
+
+const sellTokens = async () => {
+  console.log('Selling Tokens')
+  const allowance = await token.allowance(wallet.address, routerAddress);
+  console.log(`Current allowance: ${allowance}`);
+  if (allowance < sellAmount) {
+    console.log('Approving Spend (bulk approve in production)');
+    const atx = await token.approve(routerAddress, sellAmount);
+    await atx.wait();
+  }
+  const deadline = Math.floor(Date.now() / 1000) + 600;
+  const tx = await router.exactInputSingle([tokenAddress, wethAddress, fee, wallet.address, deadline, sellAmount, 0, 0]);
+  await tx.wait();
+  console.log(tx.hash);
+}
+
+
+
+/** ------------ */
+
+
 function start() {
   process.stdin.on('keypress', async (chunk, key) => {
     /* permet de changer la detection des touches pour intéragir avec le script*/
@@ -176,13 +332,19 @@ function start() {
     if (key && key.name == 'delete'){
       process.exit()
     }
-    if (key && key.name == 's') {
+    if (key && key.name == 'a') {
       await GetHashByAddress()
     }
-    if (key && key.name == 'b') {
+    if (key && key.name == 'c') {
       console.log(ctx.bold('---------START GET ADDRESS ON BLOCKCHAIN---------'))
       resetVariable()
       getContractInBlock()
+    }
+    if (key && key.name == 'b') {
+      test()
+    }
+    if (key && key.name == 's') {
+      testSell()
     }
   });
 }
@@ -247,14 +409,16 @@ const token = new ethers.Contract(
 
 const router = new ethers.Contract(
   routerAddress,
-  ['function exactInputSingle((address tokenIn, address tokenOut, uint24 fee, address recipient, uint256 deadline, uint256 amountIn, uint256 amountOutMinimum, uint160 sqrtPriceLimitX96)) external payable returns (uint256 amountOut)'],
-  account
+  [
+    'function exactInputSingle((address tokenIn, address tokenOut, uint24 fee, address recipient, uint256 deadline, uint256 amountIn, uint256 amountOutMinimum, uint160 sqrtPriceLimitX96)) external payable returns (uint256 amountOut)'
+  ],account
 );
 
 const quoter = new ethers.Contract(
   quoterAddress,
-  ['function quoteExactInputSingle(address tokenIn, address tokenOut, uint24 fee, uint256 amountIn, uint160 sqrtPriceLimitX96) public view returns (uint256 amountOut)'],
-  account
+  [
+    'function quoteExactInputSingle(address tokenIn, address tokenOut, uint24 fee, uint256 amountIn, uint160 sqrtPriceLimitX96) public view returns (uint256 amountOut)'
+  ],account
 );
 
 const buyTokens = async () => {
@@ -291,8 +455,8 @@ if (typeTrade == 's') {
 } else if (typeTrade == 'b') {
   buyTokens()  
 }
-*/
 
+*/
 
 
 
